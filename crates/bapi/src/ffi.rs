@@ -25,6 +25,45 @@ unsafe extern "C" {
     fn hammingmatch(hash: u64, table: *const u64, n: usize, max_dist: i32) -> i32;
     fn ocrtext(img: *const u8, len: usize, tessdata: *const c_char) -> Buf;
     fn vthumbnail(img: *const u8, len: usize, width: i32) -> Buf;
+    fn vid2gif(data: *const u8, len: usize) -> Buf;
+    fn c_paste_rgba(
+        dst: *mut u8,
+        dw: i32,
+        dh: i32,
+        src: *const u8,
+        sw: i32,
+        sh: i32,
+        x: i32,
+        y: i32,
+    );
+    fn c_fill_rgba(
+        p: *mut u8,
+        w: i32,
+        h: i32,
+        x: i32,
+        y: i32,
+        rw: i32,
+        rh: i32,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    );
+    fn c_rounded_rgba(
+        p: *mut u8,
+        w: i32,
+        h: i32,
+        x: i32,
+        y: i32,
+        rw: i32,
+        rh: i32,
+        rad: i32,
+        r: u8,
+        g: u8,
+        b: u8,
+        a: u8,
+    );
+    fn c_circle_copy(dst: *mut u8, src: *const u8, size: i32);
     fn buffree(b: Buf);
 }
 
@@ -36,6 +75,7 @@ fn take(b: Buf) -> Vec<u8> {
     unsafe { buffree(b) };
     v
 }
+
 
 pub fn dominant(rgba: &[u8], w: u32, h: u32) -> u32 {
     assert!(rgba.len() >= (w as usize) * (h as usize) * 4);
@@ -104,4 +144,81 @@ pub fn vips_thumbnail(img: &[u8], width: u32) -> Option<Vec<u8>> {
     } else {
         Some(v)
     }
+}
+
+pub fn vid2gif_bytes(data: &[u8]) -> Vec<u8> {
+    let b = unsafe { vid2gif(data.as_ptr(), data.len()) };
+    take(b)
+}
+
+pub fn paste(
+    dst: &mut [u8],
+    dw: u32,
+    dh: u32,
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    x: i64,
+    y: i64,
+) {
+    assert!(dst.len() >= (dw as usize) * (dh as usize) * 4);
+    assert!(src.len() >= (sw as usize) * (sh as usize) * 4);
+    unsafe {
+        c_paste_rgba(
+            dst.as_mut_ptr(),
+            dw as i32,
+            dh as i32,
+            src.as_ptr(),
+            sw as i32,
+            sh as i32,
+            x.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+            y.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+        )
+    }
+}
+
+pub fn fill(buf: &mut [u8], w: u32, h: u32, x: i64, y: i64, rw: i64, rh: i64, rgba: [u8; 4]) {
+    assert!(buf.len() >= (w as usize) * (h as usize) * 4);
+    unsafe {
+        c_fill_rgba(
+            buf.as_mut_ptr(),
+            w as i32,
+            h as i32,
+            x.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+            y.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+            rw.clamp(0, i32::MAX as i64) as i32,
+            rh.clamp(0, i32::MAX as i64) as i32,
+            rgba[0],
+            rgba[1],
+            rgba[2],
+            rgba[3],
+        )
+    }
+}
+
+pub fn rounded(buf: &mut [u8], w: u32, h: u32, rect: [i64; 4], rad: i32, rgba: [u8; 4]) {
+    assert!(buf.len() >= (w as usize) * (h as usize) * 4);
+    let [x, y, rw, rh] = rect;
+    unsafe {
+        c_rounded_rgba(
+            buf.as_mut_ptr(),
+            w as i32,
+            h as i32,
+            x.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+            y.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+            rw.clamp(0, i32::MAX as i64) as i32,
+            rh.clamp(0, i32::MAX as i64) as i32,
+            rad.max(0),
+            rgba[0],
+            rgba[1],
+            rgba[2],
+            rgba[3],
+        )
+    }
+}
+
+pub fn circle_copy(dst: &mut [u8], src: &[u8], size: u32) {
+    assert!(dst.len() >= (size as usize) * (size as usize) * 4);
+    assert!(src.len() >= (size as usize) * (size as usize) * 4);
+    unsafe { c_circle_copy(dst.as_mut_ptr(), src.as_ptr(), size as i32) }
 }

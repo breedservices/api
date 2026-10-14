@@ -164,72 +164,51 @@ async fn emoji_png_unicode(s: &str) -> Option<RgbaImage> {
 }
 
 fn paste(img: &mut RgbaImage, src: &RgbaImage, x: u32, y: u32) {
-    for sy in 0..src.height() {
-        for sx in 0..src.width() {
-            let (dx, dy) = (x + sx, y + sy);
-            if dx >= img.width() || dy >= img.height() {
-                continue;
-            }
-            let s = src.get_pixel(sx, sy);
-            if s[3] < 10 {
-                continue;
-            }
-            let d = img.get_pixel_mut(dx, dy);
-            let (a, ia) = (s[3] as u16, (255 - s[3]) as u16);
-            d[0] = ((d[0] as u16 * ia + s[0] as u16 * a) / 255) as u8;
-            d[1] = ((d[1] as u16 * ia + s[1] as u16 * a) / 255) as u8;
-            d[2] = ((d[2] as u16 * ia + s[2] as u16 * a) / 255) as u8;
-            d[3] = 255;
-        }
-    }
+    let (dw, dh) = (img.width(), img.height());
+    let (sw, sh) = (src.width(), src.height());
+    ffi::paste(
+        img.as_mut(),
+        dw,
+        dh,
+        src.as_raw(),
+        sw,
+        sh,
+        x as i64,
+        y as i64,
+    );
 }
 
 fn circle(img: &RgbaImage, size: u32) -> RgbaImage {
     let r = image::imageops::resize(img, size, size, image::imageops::FilterType::Lanczos3);
     let mut out = RgbaImage::new(size, size);
-    let c = size as f32 / 2.0;
-    for y in 0..size {
-        for x in 0..size {
-            let dx = x as f32 - c + 0.5;
-            let dy = y as f32 - c + 0.5;
-            if dx * dx + dy * dy <= c * c {
-                out.put_pixel(x, y, *r.get_pixel(x, y));
-            }
-        }
-    }
+    ffi::circle_copy(out.as_mut(), r.as_raw(), size);
     out
 }
 
 fn fill(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, c: (u8, u8, u8, u8)) {
-    for yy in y..(y + h).min(img.height()) {
-        for xx in x..(x + w).min(img.width()) {
-            img.put_pixel(xx, yy, Rgba([c.0, c.1, c.2, c.3]));
-        }
-    }
+    let (iw, ih) = (img.width(), img.height());
+    ffi::fill(
+        img.as_mut(),
+        iw,
+        ih,
+        x as i64,
+        y as i64,
+        w as i64,
+        h as i64,
+        [c.0, c.1, c.2, c.3],
+    );
 }
 
 fn rounded(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, r: u32, c: (u8, u8, u8, u8)) {
-    fill(img, x + r, y, w.saturating_sub(2 * r), h, c);
-    fill(img, x, y + r, w, h.saturating_sub(2 * r), c);
-    let cx = [x + r, x + w.saturating_sub(r + 1)];
-    let cy = [y + r, y + h.saturating_sub(r + 1)];
-    for &ccx in &cx {
-        for &ccy in &cy {
-            for yy in 0..r * 2 {
-                for xx in 0..r * 2 {
-                    let dx = xx as i32 - r as i32;
-                    let dy = yy as i32 - r as i32;
-                    if dx * dx + dy * dy > (r as i32) * (r as i32) {
-                        continue;
-                    }
-                    let (qx, qy) = (xx as i32 + ccx as i32 - r as i32, yy as i32 + ccy as i32 - r as i32);
-                    if qx >= 0 && qy >= 0 && (qx as u32) < img.width() && (qy as u32) < img.height() {
-                        img.put_pixel(qx as u32, qy as u32, Rgba([c.0, c.1, c.2, c.3]));
-                    }
-                }
-            }
-        }
-    }
+    let (iw, ih) = (img.width(), img.height());
+    ffi::rounded(
+        img.as_mut(),
+        iw,
+        ih,
+        [x as i64, y as i64, w as i64, h as i64],
+        r as i32,
+        [c.0, c.1, c.2, c.3],
+    );
 }
 
 enum Tok {
@@ -532,37 +511,161 @@ pub async fn fun_img2gif(p: &Value) -> Value {
     }
 }
 
+fn looks_like_video(data: &[u8], content_type: &str) -> bool {
+    if data.len() >= 12 && &data[4..8] == b"ftyp" {
+        return true;
+    }
+    if data.len() >= 4 && (&data[..4] == b"\x1a\x45\xdf\xa3" || &data[..4] == b"RIFF") {
+        return true;
+    }
+    if data.len() >= 4 && &data[..4] == b"OggS" {
+        return true;
+    }
+    content_type.contains("video/")
+        || content_type.contains("application/mp4")
+        || content_type.contains("video/mp4")
+}
+
+async fn fetch_video_bytes(p: &Value, url: &str) -> Result<(Vec<u8>, String), (&'static str, String)> {
+    let (_, first, ct) = match fetch(url).await {
+        Ok(t) if t.0 == 200 => t,
+        _ => return Err(("download failed", String::new())),
+    };
+
+    if looks_like_video(&first, &ct) {
+        return Ok((first, ct));
+    }
+
+    let prefix = std::env::temp_dir().join(format!(
+        "vid2gif_in_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let prefix = prefix.to_string_lossy().into_owned();
+    let dl = crate::extract::download_video(p, &prefix, false).await;
+    let path = dl.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
+    match path {
+        Some(path) => match std::fs::read(&path) {
+            Ok(bytes) => {
+                let _ = std::fs::remove_file(&path);
+                if bytes.is_empty() {
+                    Err(("extracted video is empty", String::new()))
+                } else {
+                    Ok((bytes, "video/mp4".to_string()))
+                }
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&path);
+                Err(("extracted read failed", e.to_string()))
+            }
+        },
+        None => {
+            let msg = dl.get("error").and_then(|e| e.as_str()).unwrap_or("video extraction failed");
+            Err(("unsupported video source", msg.to_string()))
+        }
+    }
+}
+
+async fn ffmpeg_vid2gif(data: &[u8]) -> Option<Vec<u8>> {
+    let ff = ffmpeg_bin()?;
+    let data = data.to_vec();
+    let mut child = tokio::process::Command::new(ff)
+        .args([
+            "-i",
+            "pipe:0",
+            "-t",
+            "30",
+            "-vf",
+            "fps=12,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+            "-f",
+            "gif",
+            "pipe:1",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .ok()?;
+
+    use tokio::io::AsyncWriteExt;
+
+    let stdin = child.stdin.take();
+    let writer = if let Some(mut stdin) = stdin {
+        Some(tokio::spawn(async move {
+            let _ = stdin.write_all(&data).await;
+            let _ = stdin.flush().await;
+            drop(stdin);
+        }))
+    } else {
+        None
+    };
+
+    let out = match child.wait_with_output().await {
+        Ok(o) if o.status.success() => o.stdout,
+        Ok(o) => {
+            let detail = String::from_utf8_lossy(&o.stderr);
+            net::log("ffmpeg", &format!("vid2gif fail :: {}", detail.chars().take(300).collect::<String>()));
+            if let Some(w) = writer {
+                w.abort();
+            }
+            return None;
+        }
+        Err(_) => {
+            if let Some(w) = writer {
+                w.abort();
+            }
+            return None;
+        }
+    };
+
+    if let Some(w) = writer {
+        let _ = w.await;
+    }
+
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 pub async fn fun_vid2gif(p: &Value) -> Value {
     let url = p.get("url").and_then(|v| v.as_str()).unwrap_or("");
     let key = p.get("imgbb_key").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()).unwrap_or_else(|| crate::config::get("imgbb_key"));
-    let (_, data, _) = match fetch(url).await {
-        Ok(t) if t.0 == 200 => t,
-        _ => return json!({"error": "download failed"}),
-    };
-    let ff = match ffmpeg_bin() {
-        Some(f) => f,
-        None => return json!({"error": "no ffmpeg"}),
-    };
-    let mut child = match tokio::process::Command::new(ff)
-        .args(["-i", "pipe:0", "-t", "30", "-vf", "fps=12,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse", "-f", "gif", "pipe:1"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(c) => c,
-        Err(e) => return json!({"error": e.to_string()}),
-    };
-    use tokio::io::AsyncWriteExt;
-    if let Some(mut stdin) = child.stdin.take() {
-        if stdin.write_all(&data).await.is_err() {
-            return json!({"error": "ffmpeg input failed"});
-        }
+    if url.is_empty() {
+        return json!({"error": "url is required"});
     }
-    let out = match child.wait_with_output().await {
-        Ok(o) if o.status.success() => o.stdout,
-        _ => return json!({"error": "conversion failed"}),
+
+    let (data, _) = match fetch_video_bytes(p, url).await {
+        Ok(v) => v,
+        Err((msg, detail)) => {
+            let mut e = msg.to_string();
+            if !detail.is_empty() {
+                e.push_str(": ");
+                e.push_str(&detail);
+            }
+            return json!({"error": e});
+        }
     };
+
+    let native = {
+        let data = data.clone();
+        tokio::task::spawn_blocking(move || ffi::vid2gif_bytes(&data))
+            .await
+            .unwrap_or_default()
+    };
+
+    let out = if !native.is_empty() {
+        native
+    } else {
+        match ffmpeg_vid2gif(&data).await {
+            Some(v) if !v.is_empty() => v,
+            _ => return json!({"error": "conversion failed"}),
+        }
+    };
+
     match imgbb(&out, "converted.gif", &key).await {
         Some(u) => json!({"url": u}),
         None => json!({"error": "upload failed"}),
@@ -609,6 +712,10 @@ pub async fn fun_quote(p: &Value) -> Value {
     let raw = av.into_raw();
     let mut grad = vec![0u8; raw.len()];
     ffi::gradient_avatar(&mut grad, &raw, asz, h, bgc, if white { 280 } else { 255 }, flip);
+    if gray {
+        // the old API grayscales the gradient layer only, matching its look
+        ffi::grayscale(&mut grad, asz, h);
+    }
     let mut img = RgbaImage::from_pixel(w, h, Rgba([bgc.0, bgc.1, bgc.2, 255]));
     let gx = if flip { (w as f32 / 2.0 - 20.0) as u32 } else { 0 };
     let gimg = RgbaImage::from_raw(asz, h, grad).unwrap();
@@ -630,14 +737,14 @@ pub async fn fun_quote(p: &Value) -> Value {
     let uw = text_width(&qf, 22.0, &uname);
     draw_text(&mut img, &qf, 22.0, (tx - uw as f32 / 2.0).max(0.0) as u32, y + 55, (89, 89, 89, 255), &uname);
     let (iw, ih) = (img.width(), img.height());
-    let mut raw = img.into_raw();
-    if gray {
-        ffi::grayscale(&mut raw, iw, ih);
-    }
+    let raw = img.into_raw();
+    let mut out = RgbaImage::from_raw(iw, ih, raw).unwrap();
+
     if blur {
-        ffi::box_blur(&mut raw, iw, ih);
+        // old API: ImageFilter.GaussianBlur(3)
+        out = image::imageops::blur(&out, 3.0);
     }
-    let out = RgbaImage::from_raw(iw, ih, raw).unwrap();
+
     json!({"image": b64(&png_bytes(&out))})
 }
 

@@ -5,34 +5,35 @@ ARCH="$(uname -m)"
 export BAPI_TESSDATA="${BAPI_TESSDATA:-/usr/share/tesseract-ocr/5/tessdata}"
 export BAPI_FONTS="${BAPI_FONTS:-$ROOT/fonts}"
 SYS=0
-if command -v pkg-config > /dev/null && pkg-config --exists vips-cpp tesseract 2>/dev/null; then
+if command -v pkg-config > /dev/null && pkg-config --exists vips-cpp tesseract libavformat libavcodec libavutil libswscale libswresample 2>/dev/null; then
   SYS=1
 fi
 if [ "$SYS" = "0" ] && [ -d "$ROOT/thirdparty/usr/include/vips" ]; then
   if [ "$ARCH" = "x86_64" ]; then
     export LD_LIBRARY_PATH="$ROOT/thirdparty/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+    export PKG_CONFIG_PATH="$ROOT/thirdparty/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
     if [ -d "$ROOT/thirdparty/usr/share/tesseract-ocr" ]; then
       export BAPI_TESSDATA="$ROOT/thirdparty/usr/share/tesseract-ocr/5/tessdata"
     fi
   fi
 fi
-if ! command -v pkg-config > /dev/null || ! pkg-config --exists vips-cpp tesseract 2>/dev/null; then
+if ! command -v pkg-config > /dev/null || ! pkg-config --exists vips-cpp tesseract libavformat libavcodec libavutil libswscale libswresample 2>/dev/null; then
   if [ ! -f "$ROOT/thirdparty/usr/include/vips/VImage8.h" ] || [ "$ARCH" != "x86_64" ]; then
     DISTRO="$(grep -oP '^ID=\K.*' /etc/os-release 2>/dev/null || echo unknown)"
     echo "no system vips/tesseract and no usable thirdparty dir."
     case "$DISTRO" in
       ubuntu|debian|raspbian|linuxmint|pop)
-        echo "run: apt install libtesseract-dev libleptonica-dev tesseract-ocr-eng libvips-dev ffmpeg yt-dlp" ;;
+        echo "run: apt install libtesseract-dev libleptonica-dev tesseract-ocr-eng libvips-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev ffmpeg yt-dlp" ;;
       fedora|rhel|centos|rocky|almalinux)
-        echo "run: dnf install tesseract-devel leptonica-devel tesseract-tessdata-eng libvips-devel ffmpeg yt-dlp" ;;
+        echo "run: dnf install tesseract-devel leptonica-devel tesseract-tessdata-eng libvips-devel libavformat-devel libavcodec-devel libavutil-devel libswscale-devel libswresample-devel ffmpeg yt-dlp" ;;
       arch|manjaro|endeavouros|cachyos)
         echo "run: pacman -S tesseract leptonica tesseract-data-eng libvips ffmpeg yt-dlp" ;;
       alpine)
-        echo "run: apk add tesseract-ocr tesseract-ocr-data-eng leptonica-dev vips-dev ffmpeg yt-dlp" ;;
+        echo "run: apk add tesseract-ocr tesseract-ocr-data-eng leptonica-dev vips-dev ffmpeg-dev yt-dlp" ;;
       opensuse*|sles)
-        echo "run: zypper install tesseract-ocr-devel libvips-devel ffmpeg yt-dlp" ;;
+        echo "run: zypper install tesseract-ocr-devel libvips-devel libavformat-devel libavcodec-devel libavutil-devel libswscale-devel libswresample-devel ffmpeg yt-dlp" ;;
       *)
-        echo "install: tesseract (+eng data), leptonica, libvips dev libs, ffmpeg, yt-dlp" ;;
+        echo "install: tesseract (+eng data), leptonica, libvips dev libs, ffmpeg dev libs (libavformat/libavcodec/libavutil/libswscale/libswresample), yt-dlp" ;;
     esac
     echo "or: ./thirdparty/fetch.sh (debian x86_64 only)"
     exit 1

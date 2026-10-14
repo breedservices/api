@@ -74,5 +74,3 @@ function render(){
 }
 search.addEventListener('input',render);
 render();
-EOF
-echo done

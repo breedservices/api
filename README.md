@@ -31,11 +31,11 @@
 
 <table>
 <tr><th>OS</th><th>Install command</th></tr>
-<tr><td>Debian / Ubuntu / Raspbian / Mint / Pop</td><td><code>apt install libtesseract-dev libleptonica-dev tesseract-ocr-eng libvips-dev ffmpeg yt-dlp</code></td></tr>
-<tr><td>Fedora / RHEL / Rocky / Alma</td><td><code>dnf install tesseract-devel leptonica-devel tesseract-tessdata-eng libvips-devel ffmpeg yt-dlp</code></td></tr>
+<tr><td>Debian / Ubuntu / Raspbian / Mint / Pop</td><td><code>apt install libtesseract-dev libleptonica-dev tesseract-ocr-eng libvips-dev libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev ffmpeg yt-dlp</code></td></tr>
+<tr><td>Fedora / RHEL / Rocky / Alma</td><td><code>dnf install tesseract-devel leptonica-devel tesseract-tessdata-eng libvips-devel libavformat-devel libavcodec-devel libavutil-devel libswscale-devel libswresample-devel ffmpeg yt-dlp</code></td></tr>
 <tr><td>Arch / Manjaro / Endeavour / Cachy</td><td><code>pacman -S tesseract leptonica tesseract-data-eng libvips ffmpeg yt-dlp</code></td></tr>
-<tr><td>Alpine</td><td><code>apk add tesseract-ocr tesseract-ocr-data-eng leptonica-dev vips-dev ffmpeg yt-dlp</code></td></tr>
-<tr><td>openSUSE / SLES</td><td><code>zypper install tesseract-ocr-devel libvips-devel ffmpeg yt-dlp</code></td></tr>
+<tr><td>Alpine</td><td><code>apk add tesseract-ocr tesseract-ocr-data-eng leptonica-dev vips-dev ffmpeg-dev yt-dlp</code></td></tr>
+<tr><td>openSUSE / SLES</td><td><code>zypper install tesseract-ocr-devel libvips-devel libavformat-devel libavcodec-devel libavutil-devel libswscale-devel libswresample-devel ffmpeg yt-dlp</code></td></tr>
 </table>
 
 ## 2. Configuration
