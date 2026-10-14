@@ -6,7 +6,7 @@ pub struct Buf {
     pub len: usize,
 }
 
-extern "C" {
+unsafe extern "C" {
     fn domcolor(rgba: *const u8, w: i32, h: i32) -> u32;
     fn grayinplace(rgba: *mut u8, w: i32, h: i32);
     fn boxblurinplace(rgba: *mut u8, w: i32, h: i32);

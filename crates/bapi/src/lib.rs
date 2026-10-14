@@ -177,7 +177,7 @@ pub fn call(route: &str, params_json: &str) -> String {
     v.to_string()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn apicall(route: *const c_char, params: *const c_char) -> *mut c_char {
     let r = unsafe { CStr::from_ptr(route) }.to_string_lossy().into_owned();
     let pj = if params.is_null() {
@@ -191,7 +191,7 @@ pub extern "C" fn apicall(route: *const c_char, params: *const c_char) -> *mut c
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn apifree(s: *mut c_char) {
     if !s.is_null() {
         unsafe { drop(CString::from_raw(s)) };

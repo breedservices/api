@@ -8,7 +8,7 @@
 <p align="center">
   <img alt="rust" src="https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white">
   <img alt="cpp" src="https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white">
-  <img alt="rust" src="https://img.shields.io/badge/Rust-2021-000000?logo=rust&logoColor=white">
+  <img alt="rust" src="https://img.shields.io/badge/Rust-2024-000000?logo=rust&logoColor=white">
   <img alt="uv" src="https://img.shields.io/badge/uv-package%20manager-DE5FE9?logo=uv&logoColor=white">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-green">
 </p>
@@ -98,6 +98,23 @@ Outputs `./serve`, `python/bapi.*.so`, and `python/libbimg.so`.
 
     from python.client import api_get
     data = await api_get("/search/web", {"q": "rust", "count": 5})
+
+If `bapi` is on disk but Python can't find it, add `python/` to `$PYTHONPATH`
+(not `$PATH`):
+
+    # current shell
+    export PYTHONPATH="/home/Klaus/projects/ts-rewrite/native/python:$PYTHONPATH"
+
+    # persist for your shell
+    echo 'export PYTHONPATH="/home/Klaus/projects/ts-rewrite/native/python:$PYTHONPATH"' >> ~/.bashrc
+    source ~/.bashrc
+
+    # system-wide (Debian/Ubuntu Python 3.13)
+    echo "$PWD/python" | sudo tee /usr/local/lib/python3.13/dist-packages/native-api.pth
+
+Verify:
+
+    python3 -c "import bapi; print(len(bapi.routes()))"
 
 ## 7. Smoke test
 
